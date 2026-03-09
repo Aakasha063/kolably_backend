@@ -54,8 +54,8 @@ class ResetPasswordRequest(BaseModel):
 class AuthTokenResponse(BaseModel):
     """Returned on signup, login, and token refresh."""
 
-    access_token: str
-    refresh_token: str
+    access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
     user: dict | None = None  # profile + role info
 
