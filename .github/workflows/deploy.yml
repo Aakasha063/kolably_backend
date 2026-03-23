@@ -1,0 +1,53 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create project archive
+        run: tar -czf kolably_backend.tar.gz .
+
+      - name: Copy archive to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "kolably_backend.tar.gz"
+          target: "~"
+
+      - name: Deploy on EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Decompress and setup
+            rm -rf kolably_backend_v2
+            mkdir -p kolably_backend_v2
+            tar -xzf kolably_backend.tar.gz -C kolably_backend_v2
+            cd kolably_backend_v2
+            
+            # Copy existing .env if present in parent dir or use default
+            if [ -f ../kolably_backend/.env ]; then
+              cp ../kolably_backend/.env .env
+            fi
+            
+            # Build and Deploy
+            sudo docker build -t kolably-backend-cicd .
+            sudo docker rm -f kolably-backend-prod || true
+            sudo docker run -d --name kolably-backend-prod -p 80:8000 --env-file .env kolably-backend-cicd
+            
+            # Cleanup
+            cd ..
+            rm -rf kolably_backend
+            mv kolably_backend_v2 kolably_backend
+            rm kolably_backend.tar.gz
