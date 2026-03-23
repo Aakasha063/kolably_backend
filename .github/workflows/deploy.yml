@@ -16,23 +16,19 @@ jobs:
           mkdir -p build_output
           tar --exclude=./build_output -czf build_output/kolably_backend.tar.gz .
 
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
       - name: Copy archive to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "build_output/kolably_backend.tar.gz"
-          target: "~"
-          strip_components: 1
+        run: scp -i ~/.ssh/key.pem build_output/kolably_backend.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~
 
       - name: Deploy on EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
+        run: |
+          ssh -i ~/.ssh/key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
             # Decompress and setup
             rm -rf kolably_backend_v2
             mkdir -p kolably_backend_v2
@@ -54,3 +50,4 @@ jobs:
             rm -rf kolably_backend
             mv kolably_backend_v2 kolably_backend
             rm kolably_backend.tar.gz
+          EOF
