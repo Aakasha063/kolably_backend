@@ -17,9 +17,12 @@ jobs:
           tar --exclude=./build_output -czf build_output/kolably_backend.tar.gz .
 
       - name: Setup SSH Agent
+        if: env.EC2_SSH_KEY != ''
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Add Remote Host to Known Hosts
         run: |
