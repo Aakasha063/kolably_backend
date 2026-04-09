@@ -16,25 +16,20 @@ jobs:
           mkdir -p build_output
           tar --exclude=./build_output -czf build_output/kolably_backend.tar.gz .
 
-      - name: Setup SSH Agent
-        if: env.EC2_SSH_KEY != ''
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-        env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Add Remote Host to Known Hosts
+      - name: Prepare SSH Key
         run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       - name: Transfer archive to EC2
         run: |
-          scp build_output/kolably_backend.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/kolably_backend.tar.gz
+          scp -i ~/.ssh/key.pem build_output/kolably_backend.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/kolably_backend.tar.gz
 
       - name: Deploy on EC2 via SSH
         run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
             set -e
             # Decompress and setup
             rm -rf kolably_backend_v2
