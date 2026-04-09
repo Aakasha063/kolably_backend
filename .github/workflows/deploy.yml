@@ -16,42 +16,30 @@ jobs:
           mkdir -p build_output
           tar --exclude=./build_output -czf build_output/kolably_backend.tar.gz .
 
-      - name: Debug Secrets (Check Lengths)
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Add Remote Host to Known Hosts
         run: |
-          if [ -z "${{ secrets.EC2_HOST }}" ]; then echo "HOST is MISSING"; else echo "HOST length: ${#EC2_HOST}"; fi
-          if [ -z "${{ secrets.EC2_USER }}" ]; then echo "USER is MISSING"; else echo "USER length: ${#EC2_USER}"; fi
-          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then echo "KEY is MISSING"; else echo "KEY length: ${#EC2_SSH_KEY}" ; fi
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       - name: Transfer archive to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          source: "build_output/kolably_backend.tar.gz"
-          target: "~/"
-          strip_components: 1
+        run: |
+          scp build_output/kolably_backend.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/kolably_backend.tar.gz
 
       - name: Deploy on EC2 via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
-          script: |
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
             # Decompress and setup
             rm -rf kolably_backend_v2
             mkdir -p kolably_backend_v2
             tar -xzf kolably_backend.tar.gz -C kolably_backend_v2
             cd kolably_backend_v2
             
-            # Copy existing .env if present in parent dir or use default
+            # Copy existing .env if present
             if [ -f ../kolably_backend/.env ]; then
               cp ../kolably_backend/.env .env
             fi
@@ -61,7 +49,7 @@ jobs:
             sudo docker rm -f kolably-backend-prod || true
             sudo docker run -d --name kolably-backend-prod -p 8001:8000 --env-file .env kolably-backend-cicd
             
-            # Reload Nginx to ensure it points to the new container
+            # Reload Nginx
             sudo systemctl reload nginx
             
             # Cleanup
@@ -69,3 +57,4 @@ jobs:
             rm -rf kolably_backend
             mv kolably_backend_v2 kolably_backend
             rm kolably_backend.tar.gz
+          EOF
