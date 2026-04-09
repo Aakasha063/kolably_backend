@@ -14,6 +14,7 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    UpdateProfileRequest,
     AuthTokenResponse,
     MessageResponse,
 )
@@ -86,7 +87,14 @@ async def get_me(user: UserInToken = Depends(get_current_user)):
 
 
 @router.patch("/me")
-async def update_me(user: UserInToken = Depends(get_current_user)):
+async def update_me(
+    data: UpdateProfileRequest,
+    user: UserInToken = Depends(get_current_user),
+):
     """Update current user's profile fields."""
-    # TODO: Implement profile update logic
-    return {"message": "Not implemented yet", "user_id": user.id}
+    return await auth_service.update_user_profile(
+        profile_id=user.id,
+        auth_id=user.auth_id,
+        role=user.role,
+        data=data,
+    )

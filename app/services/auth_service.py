@@ -13,6 +13,7 @@ from app.schemas.auth import (
     CreatorSignupRequest,
     BusinessSignupRequest,
     LoginRequest,
+    UpdateProfileRequest,
 )
 
 
@@ -387,3 +388,84 @@ async def get_user_profile(auth_id: str) -> dict:
             response["business"] = business_result.data
 
     return response
+
+
+async def update_user_profile(
+    profile_id: str, auth_id: str, role: str, data: UpdateProfileRequest
+) -> dict:
+    """
+    Update profile data in the role-specific table.
+    """
+    admin_client = get_supabase_admin_client()
+
+    # 1. Filter out None values
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if not update_data:
+        return await get_user_profile(auth_id)
+
+    # 2. Determine target table and valid fields
+    if role == "creator":
+        table = "creators"
+        valid_fields = {
+            "name",
+            "username",
+            "city",
+            "instagram_handle",
+            "niche",
+            "follower_count",
+            "profile_photo_url",
+        }
+    elif role == "business":
+        table = "businesses"
+        valid_fields = {
+            "business_name",
+            "owner_name",
+            "business_category",
+            "city",
+            "address",
+            "business_description",
+        }
+    elif role == "superadmin":
+        # Superadmins don't have a specific profile table update logic yet
+        # unless they are also a creator or business.
+        # For now, just return current profile.
+        return await get_user_profile(auth_id)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Updates for role '{role}' not supported yet",
+        )
+
+    # 3. Filter update_data to only include valid fields for the table
+    # Note: 'category' in DB is 'business_category' in schema
+    final_update = {}
+    for k, v in update_data.items():
+        if k in valid_fields:
+            # Map business_category schema field to category DB field
+            if k == "business_category":
+                final_update["category"] = v
+            # Map business_description schema field to description DB field
+            elif k == "business_description":
+                final_update["description"] = v
+            else:
+                final_update[k] = v
+
+    if not final_update:
+        return await get_user_profile(auth_id)
+
+    # 4. Perform update
+    result = (
+        admin_client.table(table)
+        .update(final_update)
+        .eq("profile_id", profile_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Could not find {table} record to update",
+        )
+
+    # 5. Return full updated profile
+    return await get_user_profile(auth_id)
