@@ -16,19 +16,25 @@ jobs:
           mkdir -p build_output
           tar --exclude=./build_output -czf build_output/kolably_backend.tar.gz .
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/key.pem
-          chmod 600 ~/.ssh/key.pem
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Copy archive to EC2
-        run: scp -i ~/.ssh/key.pem build_output/kolably_backend.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~
+      - name: Transfer archive to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          source: "build_output/kolably_backend.tar.gz"
+          target: "~/"
+          strip_components: 1
 
       - name: Deploy on EC2 via SSH
-        run: |
-          ssh -i ~/.ssh/key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
             # Decompress and setup
             rm -rf kolably_backend_v2
             mkdir -p kolably_backend_v2
@@ -45,7 +51,7 @@ jobs:
             sudo docker rm -f kolably-backend-prod || true
             sudo docker run -d --name kolably-backend-prod -p 8001:8000 --env-file .env kolably-backend-cicd
             
-            # Reload Nginx to ensure it's pointing to the new container
+            # Reload Nginx to ensure it points to the new container
             sudo systemctl reload nginx
             
             # Cleanup
@@ -53,4 +59,3 @@ jobs:
             rm -rf kolably_backend
             mv kolably_backend_v2 kolably_backend
             rm kolably_backend.tar.gz
-          EOF
