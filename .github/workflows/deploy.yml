@@ -16,6 +16,16 @@ jobs:
           mkdir -p build_output
           tar --exclude=./build_output -czf build_output/kolably_backend.tar.gz .
 
+      - name: Debug Secrets (Check Lengths)
+        run: |
+          if [ -z "${{ secrets.EC2_HOST }}" ]; then echo "HOST is MISSING"; else echo "HOST length: ${#EC2_HOST}"; fi
+          if [ -z "${{ secrets.EC2_USER }}" ]; then echo "USER is MISSING"; else echo "USER length: ${#EC2_USER}"; fi
+          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then echo "KEY is MISSING"; else echo "KEY length: ${#EC2_SSH_KEY}" ; fi
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+
       - name: Transfer archive to EC2
         uses: appleboy/scp-action@master
         with:
